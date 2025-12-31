@@ -1,0 +1,38 @@
+---
+- name: Check if Helm is installed
+  command: helm version --short
+  register: helm_check
+  failed_when: false
+  changed_when: false
+
+- name: Download and install Helm
+  when: "{{ helm_check.rc != 0 }}"
+  shell: |
+    curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+- name: Clone app-of-apps repo
+  ansible.builtin.git:
+    repo: "https://github.com/PMW9905/app-of-apps"
+    dest: /tmp/app-of-apps
+    version: main
+    force: yes
+
+- name: Deploy ArgoCD Helm Chart
+  kubernetes.core.helm:
+    name: argocd
+    chart_ref: /tmp/app-of-apps/charts/argocd
+    release_namespace: argocd
+    create_namespace: yes
+    kubeconfig: /etc/rancher/k3s/k3s.yaml
+    dependency_update: True
+    state: present
+    values_files:
+      - /tmp/app-of-apps/charts/argocd/values.yaml
+
+- name: Apply root app-of-apps Manifest
+  shell: sudo k3s kubectl apply -f /tmp/app-of-apps/root/templates/root-application.yaml
+  register: root_apply
+
+- name: Print with a custom message
+  debug:
+    msg: "root_apply: {{ root_apply }}"
