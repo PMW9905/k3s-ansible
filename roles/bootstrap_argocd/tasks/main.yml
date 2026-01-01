@@ -6,9 +6,36 @@
   changed_when: false
 
 - name: Download and install Helm
-  when: "{{ helm_check.rc != 0 }}"
+  when: helm_check.rc != 0
   shell: |
     curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+- name: Check if age is installed
+  command: age --version
+  register: age_check
+  failed_when: false
+  changed_when: false
+
+- name: Install age from apt repository
+  when: age_check.rc != 0
+  apt:
+    name: age
+    state: present
+    update_cache: yes
+
+- name: Check if SOPS is installed
+  command: sops --version
+  register: sops_check
+  failed_when: false
+  changed_when: false
+
+- name: Download and install SOPS
+  when: sops_check.rc != 0
+  shell: |
+    SOPS_VERSION=$(curl -s https://api.github.com/repos/getsops/sops/releases/latest | grep tag_name | cut -d '"' -f 4)
+    curl -LO https://github.com/getsops/sops/releases/download/${SOPS_VERSION}/sops-${SOPS_VERSION}.linux.amd64
+    sudo mv sops-${SOPS_VERSION}.linux.amd64 /usr/local/bin/sops
+    sudo chmod +x /usr/local/bin/sops
 
 - name: Clone app-of-apps repo
   ansible.builtin.git:
@@ -16,6 +43,16 @@
     dest: /tmp/app-of-apps
     version: main
     force: yes
+
+- name: Clone sops repo
+  ansible.builtin.git:
+    repo: "https://github.com/PMW9905/sops"
+    dest: /tmp/sops
+    version: main
+    force: yes
+
+- name: Decrypt and apply porkbun secret
+  shell: SOPS_AGE_KEY="{{ age_private_key }}" sops -d /tmp/sops/porkbun-secret.yaml | sudo k3s kubectl apply -f -
 
 - name: Deploy ArgoCD Helm Chart
   kubernetes.core.helm:
@@ -32,7 +69,3 @@
 - name: Apply root app-of-apps Manifest
   shell: sudo k3s kubectl apply -f /tmp/app-of-apps/root/templates/root-application.yaml
   register: root_apply
-
-- name: Print with a custom message
-  debug:
-    msg: "root_apply: {{ root_apply }}"
