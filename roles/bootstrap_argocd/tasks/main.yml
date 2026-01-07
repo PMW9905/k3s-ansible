@@ -50,9 +50,22 @@
     dest: /tmp/sops
     version: main
     force: yes
+#
+# - name: Decrypt and apply porkbun secret
+#   shell: SOPS_AGE_KEY="{{ age_private_key }}" sops -d /tmp/sops/porkbun-secret.yaml | sudo k3s kubectl apply -f -
+#
+# - name: Decrypt and apply tailscale secret
+#   shell: SOPS_AGE_KEY="{{ age_private_key }}" sops -d /tmp/sops/tailscale-secret.yaml | sudo k3s kubectl apply -f -
+#
 
-- name: Decrypt and apply porkbun secret
-  shell: SOPS_AGE_KEY="{{ age_private_key }}" sops -d /tmp/sops/porkbun-secret.yaml | sudo k3s kubectl apply -f -
+
+- name: Decrypt and apply all SOPS YAML files
+  shell: |
+    for file in /tmp/sops/*.yaml; do
+      if [[ $(basename "$file") != ".sops.yaml" ]]; then
+        SOPS_AGE_KEY="{{ age_private_key }}" sops -d "$file" | sudo k3s kubectl apply -f -
+      fi
+    done
 
 - name: Deploy ArgoCD Helm Chart
   kubernetes.core.helm:
