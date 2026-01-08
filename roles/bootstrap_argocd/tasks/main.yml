@@ -59,13 +59,30 @@
 #
 
 
-- name: Decrypt and apply all SOPS YAML files
+- name: List SOPS files to be decrypted
+  find:
+    paths: /tmp/sops
+    patterns: "*.yaml"
+    excludes: ".sops.yaml"
+  register: sops_files
+
+- name: Debug - Show found SOPS files
+  debug:
+    var: sops_files.files
+
+- name: Verify age_private_key is set
+  fail:
+    msg: "age_private_key variable is not defined or empty"
+  when: age_private_key is not defined or age_private_key == ''
+
+- name: Decrypt and apply each SOPS YAML file
   shell: |
-    for file in /tmp/sops/*.yaml; do
-      if [[ $(basename "$file") != ".sops.yaml" ]]; then
-        SOPS_AGE_KEY="{{ age_private_key }}" sops -d "$file" | sudo k3s kubectl apply -f -
-      fi
-    done
+    set -e
+    echo "Processing file: {{ item.path }}"
+    SOPS_AGE_KEY="{{ age_private_key }}" sops -d "{{ item.path }}" | sudo k3s kubectl apply -f -
+  loop: "{{ sops_files.files }}"
+  register: sops_apply_result
+  failed_when: sops_apply_result.rc != 0
 
 - name: Deploy ArgoCD Helm Chart
   kubernetes.core.helm:
