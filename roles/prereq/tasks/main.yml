@@ -274,3 +274,32 @@
         content: "{{ registries_config_yaml }}"
         dest: "/etc/rancher/k3s/registries.yaml"
         mode: "0644"
+
+- name: Install iSCSI packages
+  apt:
+    name:
+      - open-iscsi
+      - lsscsi
+      - sg3-utils
+      - multipath-tools
+      - scsitools
+    state: present
+    update_cache: yes
+
+- name: Configure multipath
+  copy:
+    dest: /etc/multipath.conf
+    content: |
+      defaults {
+        user_friendly_names yes
+        find_multipaths yes
+      }
+
+- name: Enable and start services
+  systemd:
+    name: "{{ item }}"
+    enabled: yes
+    state: started
+  loop:
+    - multipath-tools
+    - open-iscsi
